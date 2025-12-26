@@ -1,0 +1,600 @@
+# code_archive.py
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import inch
+import os
+
+def add_code_file(c, filepath, start_y, max_width, max_height):
+    c.setFont("Courier", 7)
+    y = start_y
+    left_margin = inch * 0.5
+    right_margin = left_margin + max_width
+    line_height = 9
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except UnicodeDecodeError:
+        # Skip binary files or non-text
+        return y
+    c.drawString(left_margin, y, f"File: {filepath}")
+    y -= line_height * 2
+    for line in lines:
+        # Wrap long lines
+        while len(line) > 100:
+            part = line[:100]
+            c.drawString(left_margin, y, part.rstrip())
+            y -= line_height
+            line = line[100:]
+            if y < inch:
+                c.showPage()
+                y = max_height
+                c.setFont("Courier", 7)
+        c.drawString(left_margin, y, line.rstrip())
+        y -= line_height
+        if y < inch:
+            c.showPage()
+            y = max_height
+            c.setFont("Courier", 7)
+    return y
+
+def generate_code_pdf(root_dir, output_pdf):
+    c = canvas.Canvas(output_pdf, pagesize=letter)
+    width, height = letter
+    y = height - inch
+    max_width = width - inch
+    max_height = height - inch
+    for subdir, _, files in os.walk(root_dir):
+        for file in sorted(files):
+            filepath = os.path.join(subdir, file)
+            y = add_code_file(c, filepath, y, max_width, max_height)
+            if y < inch:
+                c.showPage()
+                y = height - inch
+    c.save()
+
+if __name__ == "__main__":
+    root_dir = "."
+    output_pdf = "health_management_system_code.pdf"
+    generate_code_pdf(root_dir, output_pdf)
+    print(f"Code archive PDF generated: {output_pdf}")
+
+# install.sh
+#!/usr/bin/env bash
+set -e
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+echo "Project root: $ROOT"
+# 1) Create virtualenv for backend
+python3 -m venv "$ROOT/.venv"
+source "$ROOT/.venv/bin/activate"
+# 2) Install backend deps
+pip install --upgrade pip
+pip install -r "$ROOT/backend/requirements.txt"
+# 3) Build optional C extension (if gcc & python dev headers present)
+echo "Building C extension (optional) ..."
+if [ -f "$ROOT/backend/cmodules/healthcalc.c" ]; then
+  cd "$ROOT/backend/cmodules"
+  python3 setup.py build_ext --inplace || echo "C build failed; continuing without C module."
+  cd "$ROOT"
+fi
+# 4) Start Flask backend (in background)
+echo "Starting backend..."
+cd "$ROOT/backend"
+# ensure DB exists
+python - <<PY
+from models import init_db
+init_db()
+print("DB initialized at backend/hms.db")
+PY
+# run in background
+python app.py &
+echo "Backend started at http://127.0.0.1:5000"
+echo "Open the frontend file frontend/index.html in your browser (file:// or via simple http server)."
+# optional: start a tiny HTTP server for frontend
+cd "$ROOT/frontend"
+python3 -m http.server 8000 &
+echo "Frontend served at http://127.0.0.1:8000"
+echo "Done. Ctrl+C to stop servers.
+
+# backend/requirements.txt
+Flask==2.2.5
+Flask-Cors==3.0.10
+reportlab==4.0.7
+
+# backend/app.py
+# backend/app.py
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
+from models import get_conn, init_db
+from report_utils import generate_health_report
+import sqlite3, io, os
+init_db()
+app = Flask(__name__)
+CORS(app)
+# ------------------------
+# Vitals
+# ------------------------
+@app.route("/api/vitals", methods=["POST"])
+def add_vital():
+    data = request.json
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO vitals (user_id, type, value, unit) VALUES (?, ?, ?, ?)",
+                (data.get("user_id",1), data["type"], str(data["value"]), data.get("unit","")))
+    conn.commit()
+    conn.close()
+    return jsonify({"status":"ok"}), 201
+@app.route("/api/vitals/<int:user_id>", methods=["GET"])
+def get_vitals(user_id):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM vitals WHERE user_id=? ORDER BY timestamp DESC", (user_id,))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return jsonify(rows)
+# ------------------------
+# Symptoms
+# ------------------------
+@app.route("/api/symptoms", methods=["POST"])
+def add_symptom():
+    data = request.json
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute("INSERT INTO symptoms (user_id, name, system, severity, notes) VALUES (?, ?, ?, ?, ?)",
+                (data.get('user_id',1), data['name'], data.get('system','General'), int(data.get('severity',1)), data.get('notes','')))
+    conn.commit(); conn.close()
+    return jsonify({"status":"ok"}), 201
+@app.route("/api/symptoms/<int:user_id>", methods=["GET"])
+def get_symptoms(user_id):
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute("SELECT * FROM symptoms WHERE user_id=? ORDER BY timestamp DESC", (user_id,))
+    rows = [dict(r) for r in cur.fetchall()]; conn.close()
+    return jsonify(rows)
+# ------------------------
+# Medications
+# ------------------------
+@app.route("/api/meds", methods=["POST"])
+def add_med():
+    data = request.json
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute("INSERT INTO medications (user_id, name, dose, schedule, start_date, end_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (data.get('user_id',1), data['name'], data.get('dose',''), data.get('schedule',''), data.get('start_date',''), data.get('end_date',''), data.get('notes','')))
+    conn.commit(); conn.close()
+    return jsonify({"status":"ok"}), 201
+@app.route("/api/meds/<int:user_id>", methods=["GET"])
+def get_meds(user_id):
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute("SELECT * FROM medications WHERE user_id=? ORDER BY id DESC", (user_id,))
+    rows = [dict(r) for r in cur.fetchall()]; conn.close()
+    return jsonify(rows)
+# ------------------------
+# Appointments
+# ------------------------
+@app.route("/api/appointments", methods=["POST"])
+def add_appt():
+    data = request.json
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute("INSERT INTO appointments (user_id, doctor, datetime, type, notes) VALUES (?, ?, ?, ?, ?)",
+                (data.get('user_id',1), data.get('doctor',''), data.get('datetime',''), data.get('type','in-person'), data.get('notes','')))
+    conn.commit(); conn.close()
+    return jsonify({"status":"ok"}), 201
+@app.route("/api/appointments/<int:user_id>", methods=["GET"])
+def get_appts(user_id):
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute("SELECT * FROM appointments WHERE user_id=? ORDER BY datetime DESC", (user_id,))
+    rows = [dict(r) for r in cur.fetchall()]; conn.close()
+    return jsonify(rows)
+# ------------------------
+# Reports
+# ------------------------
+@app.route("/api/report/<int:user_id>", methods=["GET"])
+def get_report(user_id):
+    # gather user + records
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute("SELECT * FROM users WHERE id=?", (user_id,))
+    row = cur.fetchone()
+    user = dict(row) if row is not None else {"name":"User"}
+    # fetch rows separately
+    cur.execute("SELECT * FROM vitals WHERE user_id=? ORDER BY timestamp DESC LIMIT 100", (user_id,))
+    vitals = [dict(r) for r in cur.fetchall()]
+    cur.execute("SELECT * FROM symptoms WHERE user_id=? ORDER BY timestamp DESC LIMIT 100", (user_id,))
+    symptoms = [dict(r) for r in cur.fetchall()]
+    cur.execute("SELECT * FROM medications WHERE user_id=? ORDER BY id DESC", (user_id,))
+    meds = [dict(r) for r in cur.fetchall()]
+    cur.execute("SELECT * FROM appointments WHERE user_id=? ORDER BY datetime DESC", (user_id,))
+    appts = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    pdf_bytes = generate_health_report(user, vitals, symptoms, meds, appts)
+    return send_file(io.BytesIO(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name=f"hms-report-user{user_id}.pdf")
+if __name__ == "__main__":
+    # ensure a default user exists
+    conn = get_conn(); cur = conn.cursor()
+    cur.execute("INSERT OR IGNORE INTO users (id, name, email) VALUES (1, 'Mohit Prad', 'mohit@example.com')")
+    conn.commit(); conn.close()
+    app.run(debug=True, port=5000)
+
+# backend/models.py
+# backend/models.py
+import sqlite3
+from pathlib import Path
+DB_PATH = Path(__file__).parent / "hms.db"
+def get_conn():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+def init_db():
+    conn = get_conn()
+    cur = conn.cursor()
+    # users (simple placeholder)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT,
+      email TEXT
+    )""")
+    # vitals (existing)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS vitals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      type TEXT,
+      value TEXT,
+      unit TEXT,
+      timestamp TEXT DEFAULT CURRENT_TIMESTAMP
+    )""")
+    # symptoms
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS symptoms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      name TEXT,
+      system TEXT,
+      severity INTEGER,
+      notes TEXT,
+      timestamp TEXT DEFAULT CURRENT_TIMESTAMP
+    )""")
+    # medications
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS medications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      name TEXT,
+      dose TEXT,
+      schedule TEXT,
+      start_date TEXT,
+      end_date TEXT,
+      notes TEXT
+    )""")
+    # appointments
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS appointments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      doctor TEXT,
+      datetime TEXT,
+      type TEXT,
+      notes TEXT
+    )""")
+    conn.commit()
+    conn.close()
+
+# backend/report_utils.py
+# backend/report_utils.py
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+import io
+from datetime import datetime
+def generate_health_report(user, vitals, symptoms, meds, appts):
+    """
+    Returns bytes of a simple PDF summarizing the supplied records.
+    """
+    mem = io.BytesIO()
+    c = canvas.Canvas(mem, pagesize=letter)
+    width, height = letter
+    y = height - 50
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(50, y, f"Health Report — {user.get('name','User')}")
+    y -= 25
+    c.setFont("Helvetica", 10)
+    c.drawString(50, y, f"Generated: {datetime.now().isoformat(sep=' ', timespec='seconds')}")
+    y -= 30
+    def draw_section(title, rows, formatter):
+        nonlocal y
+        c.setFont("Helvetica-Bold", 12); c.drawString(50, y, title); y -= 14
+        c.setFont("Helvetica", 9)
+        if not rows:
+            c.drawString(60, y, "— none"); y -= 16
+            return
+        for r in rows:
+            for line in formatter(r):
+                if y < 80:
+                    c.showPage(); y = height - 50
+                c.drawString(60, y, line)
+                y -= 12
+            y -= 6
+    draw_section("Vitals", vitals, lambda v: [f"{v['timestamp']} — {v['type']}: {v['value']} {v['unit']}"])
+    draw_section("Symptoms", symptoms, lambda s: [f"{s['timestamp']} — {s['name']} ({s['system']}) severity={s['severity']}", f"Notes: {s['notes'] or '—'}"])
+    draw_section("Medications", meds, lambda m: [f"{m['name']} {m['dose']} — {m['schedule']} (start {m['start_date'] or '—'})"])
+    draw_section("Appointments", appts, lambda a: [f"{a['datetime']} — Dr. {a['doctor']} ({a['type']})"])
+    c.showPage()
+    c.save()
+    mem.seek(0)
+    return mem.read()
+
+# backend/cmodules/healthcalc.c
+/* backend/cmodules/healthcalc.c */
+ #include <Python.h>
+ /* healthcalc.calc_bmi(weight, height_m) -> bmi */
+ static PyObject* calc_bmi(PyObject* self, PyObject* args) {
+    double weight, height;
+    if (!PyArg_ParseTuple(args, "dd", &weight, &height)) {
+        return NULL;
+    }
+    if (height <= 0) {
+        PyErr_SetString(PyExc_ValueError, "height must be > 0");
+        return NULL;
+    }
+    double bmi = weight / (height * height);
+    return Py_BuildValue("d", bmi);
+ }
+ static PyMethodDef HealthCalcMethods[] = {
+    {"calc_bmi", calc_bmi, METH_VARARGS, "Calculate BMI from weight(kg) and height(m)."},
+    {NULL, NULL, 0, NULL}
+ };
+ static struct PyModuleDef healthcalcmodule = {
+    PyModuleDef_HEAD_INIT,
+    "healthcalc",
+    "Health calculation helpers",
+    -1,
+    HealthCalcMethods
+ };
+ PyMODINIT_FUNC PyInit_healthcalc(void) {
+    return PyModule_Create(&healthcalcmodule);
+ }
+
+# backend/cmodules/setup.py
+# backend/cmodules/setup.py
+from setuptools import setup, Extension
+module = Extension('healthcalc', sources=['healthcalc.c'])
+setup(
+    name='healthcalc',
+    version='0.1',
+    ext_modules=[module]
+)
+
+# frontend/index.html
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>HMS - Demo UI</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Health Management System</h1>
+      <div class="nav">
+        <button data-page="dashboard">Dashboard</button>
+        <button data-page="vitals">Vitals</button>
+        <button data-page="symptoms">Symptoms</button>
+        <button data-page="meds">Medications</button>
+        <button data-page="appts">Appointments</button>
+        <button data-page="reports">Reports</button>
+      </div>
+    </header>
+    <main id="main">
+      <!-- Content injected by app.js -->
+    </main>
+    <footer>
+      <small>Demo HMS — Local</small>
+    </footer>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
+
+# frontend/styles.css
+:root{
+  --primary: #4f46e5;
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --muted: #6b7280;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter, system-ui, Arial, sans-serif;background:var(--bg);color:#111827}
+.app{max-width:980px;margin:0 auto}
+header{display:flex;align-items:center;justify-content:space-between;padding:16px}
+header h1{margin:0;font-size:18px}
+.nav button{margin-left:8px;padding:8px 10px;border-radius:8px;border:0;background:transparent;cursor:pointer}
+.nav button:hover{background:#eef2ff}
+main{padding:16px}
+.card{background:var(--card);border-radius:12px;padding:12px;box-shadow:0 2px 6px rgba(15,23,42,0.06);margin-bottom:12px}
+.form-row{display:flex;gap:8px;flex-wrap:wrap}
+input, select, textarea{padding:8px;border-radius:8px;border:1px solid #e6edf3;min-width:0}
+button.primary{background:var(--primary);color:white;border:0;padding:8px 12px;border-radius:8px;cursor:pointer}
+.list-item{padding:8px;border-radius:8px;border:1px solid #eef2ff;margin-bottom:8px}
+.small{font-size:12px;color:var(--muted)}
+.footer-row{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+
+# frontend/app.js
+// app.js - minimal SPA
+const API = "http://127.0.0.1:5000/api";
+const userId = 1;
+const main = document.getElementById("main");
+document.querySelectorAll("header .nav button").forEach(btn => {
+  btn.addEventListener("click", () => loadPage(btn.dataset.page));
+});
+function loadPage(page){
+  if(page === "dashboard") return renderDashboard();
+  if(page === "vitals") return renderVitals();
+  if(page === "symptoms") return renderSymptoms();
+  if(page === "meds") return renderMeds();
+  if(page === "appts") return renderAppts();
+  if(page === "reports") return renderReports();
+}
+loadPage("dashboard");
+// ---------- Dashboard ---------
+async function renderDashboard(){
+  main.innerHTML = `<div class="card"><h2>Dashboard</h2><div id="dash-content" class="small">Loading...</div></div>`;
+  const dash = document.getElementById("dash-content");
+  const res = await fetch(`${API}/vitals/${userId}`);
+  const vitals = await res.json();
+  dash.innerHTML = vitals.slice(0,6).map(v => `<div>${v.timestamp} — <strong>${v.type}</strong>: ${v.value} ${v.unit}</div>`).join("");
+}
+// ---------- Vitals ---------
+function renderVitals(){
+  main.innerHTML = `
+    <div class="card"><h2>Vitals</h2>
+      <form id="vitalForm" class="form-row">
+        <input name="type" placeholder="type (bp/hr/temp)" required>
+        <input name="value" placeholder="value" required>
+        <input name="unit" placeholder="unit">
+        <button class="primary">Add Vital</button>
+      </form>
+      <div id="vlist" class="small"></div>
+    </div>`;
+  document.getElementById("vitalForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const f = e.target;
+    const body = {
+      user_id: userId,
+      type: f.type.value,
+      value: f.value.value,
+      unit: f.unit.value
+    };
+    await fetch(`${API}/vitals`, {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(body)});
+    f.reset(); await loadVitalsList();
+  });
+  loadVitalsList();
+}
+async function loadVitalsList(){
+  const res = await fetch(`${API}/vitals/${userId}`);
+  const data = await res.json();
+  const container = document.getElementById("vlist");
+  container.innerHTML = data.map(v => `<div class="list-item"><div><strong>${v.type}</strong> — ${v.value} ${v.unit}</div><div class="small">${v.timestamp}</div></div>`).join("");
+}
+// ---------- Symptoms ---------
+function renderSymptoms(){
+  main.innerHTML = `
+    <div class="card">
+      <h2>Symptoms</h2>
+      <form id="symForm" class="form-row">
+        <input name="name" placeholder="Symptom name" required>
+        <select name="system">
+          <option>Cardiovascular</option>
+          <option>Respiratory</option>
+          <option>Digestive</option>
+          <option>Nervous</option>
+        </select>
+        <input name="severity" type="number" min="1" max="10" placeholder="severity 1-10" required>
+        <input name="notes" placeholder="notes">
+        <button class="primary">Log Symptom</button>
+      </form>
+      <div id="slist" class="small"></div>
+    </div>`;
+  document.getElementById("symForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const f = e.target;
+    const body = { user_id:userId, name:f.name.value, system:f.system.value, severity:Number(f.severity.value), notes: f.notes.value };
+    await fetch(`${API}/symptoms`, {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(body)});
+    f.reset(); loadSymptomsList();
+  });
+  loadSymptomsList();
+}
+async function loadSymptomsList(){
+  const res = await fetch(`${API}/symptoms/${userId}`);
+  const data = await res.json();
+  const container = document.getElementById("slist");
+  container.innerHTML = data.map(s=>`<div class="list-item"><div><strong>${s.name}</strong> (${s.system}) severity:${s.severity}</div><div class="small">${s.timestamp}</div><div>${s.notes || ''}</div></div>`).join("");
+}
+// ---------- Medications ---------
+function renderMeds(){
+  main.innerHTML = `
+    <div class="card">
+      <h2>Medications</h2>
+      <form id="medForm" class="form-row">
+        <input name="name" placeholder="Medication name" required>
+        <input name="dose" placeholder="Dose (e.g., 5mg)">
+        <input name="schedule" placeholder="Schedule (e.g., once daily)">
+        <input name="start_date" type="date">
+        <button class="primary">Add Med</button>
+      </form>
+      <div id="medlist" class="small"></div>
+    </div>`;
+  document.getElementById("medForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const f = e.target;
+    const body = {
+      user_id: userId,
+      name: f.name.value,
+      dose: f.dose.value,
+      schedule: f.schedule.value,
+      start_date: f.start_date.value
+    };
+    await fetch(`${API}/meds`, {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(body)});
+    f.reset(); loadMedsList();
+  });
+  loadMedsList();
+}
+async function loadMedsList(){
+  const res = await fetch(`${API}/meds/${userId}`);
+  const data = await res.json();
+  document.getElementById("medlist").innerHTML = data.map(m=>`<div class="list-item"><strong>${m.name}</strong> ${m.dose} — ${m.schedule}<div class="small">start: ${m.start_date || '—'}</div></div>`).join("");
+}
+// ---------- Appointments ---------
+function renderAppts(){
+  main.innerHTML = `
+    <div class="card">
+      <h2>Appointments</h2>
+      <form id="apptForm" class="form-row">
+        <input name="doctor" placeholder="Doctor name" required>
+        <input name="datetime" type="datetime-local" required>
+        <select name="type"><option>in-person</option><option>telehealth</option></select>
+        <input name="notes" placeholder="notes">
+        <button class="primary">Book</button>
+      </form>
+      <div id="applist" class="small"></div>
+    </div>`;
+  document.getElementById("apptForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const f = e.target;
+    const body = {
+      user_id: userId,
+      doctor: f.doctor.value,
+      datetime: f.datetime.value,
+      type: f.type.value,
+      notes: f.notes.value
+    };
+    await fetch(`${API}/appointments`, {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(body)});
+    f.reset(); loadApptsList();
+  });
+  loadApptsList();
+}
+async function loadApptsList(){
+  const res = await fetch(`${API}/appointments/${userId}`);
+  const data = await res.json();
+  document.getElementById("applist").innerHTML = data.map(a=>`<div class="list-item"><strong>${a.doctor}</strong> — ${a.datetime} <div class="small">${a.type}</div></div>`).join("");
+}
+// ---------- Reports ---------
+function renderReports(){
+  main.innerHTML = `
+    <div class="card">
+      <h2>Reports</h2>
+      <button id="genReport" class="primary">Generate PDF Report</button>
+      <div id="rmsg" class="small"></div>
+    </div>`;
+  document.getElementById("genReport").addEventListener("click", async ()=>{
+    const url = `${API}/report/${userId}`;
+    // Download PDF
+    const res = await fetch(url);
+    if (!res.ok) return alert('Failed to generate report');
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `hms-report-user${userId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    document.getElementById("rmsg").innerText = "Report downloaded.";
+  });
+}

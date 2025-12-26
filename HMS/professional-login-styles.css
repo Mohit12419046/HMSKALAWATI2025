@@ -1,0 +1,200 @@
+/* Professional Login Styles */
+.login-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%);
+  padding: 16px;
+}
+
+.login-card {
+  background: #ffffff;
+  padding: 32px;
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.1);
+  width: 100%;
+  max-width: 450px;
+  text-align: center;
+  position: relative;
+}
+
+.logo {
+  margin-bottom: 32px;
+}
+
+.logo-icon {
+  font-size: 64px;
+  margin-bottom: 12px;
+  animation: pulse 2s infinite;
+}
+
+.brand-name {
+  font-size: 24px;
+  font-weight: 700;
+  color: #4f46e5;
+  margin: 0;
+  letter-spacing: -0.5px;
+}
+
+.login-card h2 {
+  margin: 0 0 16px 0;
+  color: #1f2937;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.login-card p {
+  margin: 0 0 24px 0;
+  color: #6b7280;
+  line-height: 1.6;
+  font-size: 16px;
+}
+
+.login-card .form-group {
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.login-card label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #374151;
+  font-size: 14px;
+}
+
+.login-card input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 2px solid #e5e7eb;
+  font-family: inherit;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  background: #f9fafb;
+}
+
+.login-card input:focus {
+  outline: none;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+  background: #ffffff;
+}
+
+.login-card .primary {
+  width: 100%;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: white;
+  border: 0;
+  padding: 14px 20px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+.login-card .primary:hover {
+  background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.4);
+}
+
+.login-card .secondary {
+  width: 100%;
+  margin-top: 12px;
+  background: transparent;
+  color: #4f46e5;
+  border: 2px solid #4f46e5;
+  padding: 12px 20px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 16px;
+  transition: all 0.3s ease;
+}
+
+.login-card .secondary:hover {
+  background: #4f46e5;
+  color: white;
+  transform: translateY(-1px);
+}
+
+.login-footer {
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.login-footer small {
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.login-footer a {
+  color: #4f46e5;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.login-footer a:hover {
+  text-decoration: underline;
+}
+
+/* Animations */
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.login-card {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+/* Mobile Login */
+@media (max-width: 768px) {
+  .login-container {
+    padding: 16px;
+  }
+
+  .login-card {
+    padding: 24px;
+    max-width: 100%;
+  }
+
+  .logo-icon {
+    font-size: 48px;
+  }
+
+  .brand-name {
+    font-size: 20px;
+  }
+
+  .login-card h2 {
+    font-size: 24px;
+  }
+
+  .login-card p {
+    font-size: 14px;
+  }
+}
