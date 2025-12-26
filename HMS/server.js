@@ -134,9 +134,33 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-app.post('/api/auth/register', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, email, password, role, department } = req.body;
+
+    // Check if this is the first user registration (no authentication required)
+    const userCount = await User.count();
+    const isFirstUser = userCount === 0;
+
+    // If not the first user, require authentication and admin role
+    if (!isFirstUser) {
+      // Check authentication
+      const authHeader = req.headers['authorization'];
+      const token = authHeader && authHeader.split(' ')[1];
+      if (!token) return res.status(401).json({ message: 'Access token required' });
+
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        req.user = decoded;
+      } catch (err) {
+        return res.status(403).json({ message: 'Invalid token' });
+      }
+
+      // Check admin role
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ message: 'Insufficient permissions' });
+      }
+    }
 
     const existingUser = await User.findOne({
       where: { email },
@@ -148,18 +172,28 @@ app.post('/api/auth/register', authenticateToken, authorizeRoles('admin'), async
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // First user is automatically admin
+    const userRole = isFirstUser ? 'admin' : (role || 'nurse');
+
     const user = await User.create({
       name,
       email,
       password: hashedPassword,
-      role,
-      department,
+      role: userRole,
+      department: department || 'General',
       isActive: true
     });
 
-    console.log(`User ${name} created with role ${role} by ${req.user.name}`);
+    if (isFirstUser) {
+      console.log(`First admin user ${name} created successfully`);
+    } else {
+      console.log(`User ${name} created with role ${userRole} by ${req.user.name}`);
+    }
 
-    res.status(201).json({ message: 'User created successfully' });
+    res.status(201).json({
+      message: 'User created successfully',
+      isFirstUser: isFirstUser
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
