@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Health Management System - Login</title>
+    <link rel="stylesheet" href="login-styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="logo-section">
+                <img src="photo.png" alt="Hospital Logo" class="logo">
+                <h1>KALAWATI HOSPITAL</h1>
+                <p class="subtitle">Health Management System</p>
+            </div>
+
+            <div class="login-form">
+                <h2>Welcome</h2>
+                <p class="login-description">Click the button below to access the Health Management System</p>
+
+                <button id="loginBtn" class="login-button">
+                    <i class="fas fa-sign-in-alt"></i>
+                    Enter System
+                </button>
+
+                <div id="loginMessage"></div>
+            </div>
+
+            <div class="footer-info">
+                <p>&copy; 2025 KALAWATI HOSPITAL</p>
+                <p>Your Health Our Vision...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('loginBtn').addEventListener('click', async function() {
+            const loginMessage = document.getElementById('loginMessage');
+
+            try {
+                // Simulate login by directly setting user data
+                const user = {
+                    id: 1,
+                    name: 'Admin User',
+                    email: 'admin@kalawatihms.com',
+                    role: 'admin'
+                };
+
+                // Store user in localStorage
+                localStorage.setItem('hms_user', JSON.stringify(user));
+
+                // Show success message
+                loginMessage.innerHTML = '<p class="success">Login successful! Redirecting...</p>';
+
+                // Redirect to main application after a short delay
+                setTimeout(() => {
+                    window.location.href = 'index_responsive.html';
+                }, 1000);
+
+            } catch (error) {
+                loginMessage.innerHTML = '<p class="error">Login failed. Please try again.</p>';
+            }
+        });
+    </script>
+</body>
+</html>

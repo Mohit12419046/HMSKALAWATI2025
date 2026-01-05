@@ -1,0 +1,49 @@
+# Git files
+.git
+.gitignore
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env
+venv
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node.js (if not needed)
+node_modules
+npm-debug.log*
+
+# Database files (will be created in container)
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# Test files (optional)
+test_*
+*_test.py
+
+# Documentation
+README.md
+TODO*
+
+# Temporary files
+*.tmp
+*.temp

@@ -5,6 +5,7 @@
   <title>Hospital Management System - Professional Dashboard</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="responsive.css">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
@@ -15,10 +16,19 @@
         <img src="photo.png" alt="Logo" class="logo">
         <div class="header-info">
           <h1>KALAWATI HOSPITAL</h1>
-          <p class="subtitle">Advanced Hospital Management System</p>
+          <p class="subtitle">Advanced Health Management System</p>
         </div>
       </div>
       <div class="header-right">
+        <div class="font-controls">
+          <button id="decreaseFontBtn" class="font-btn" title="Decrease Font Size">
+            <i class="fas fa-minus"></i>
+          </button>
+          <span class="font-size-label">Font Size</span>
+          <button id="increaseFontBtn" class="font-btn" title="Increase Font Size">
+            <i class="fas fa-plus"></i>
+          </button>
+        </div>
         <div class="user-info">
           <i class="fas fa-user-circle"></i>
           <span id="userDisplayName">Admin User Dashboard</span>
@@ -82,6 +92,10 @@
           <i class="fas fa-brain"></i>
           <span>AI Health Reports</span>
         </button>
+        <button class="nav-btn" data-page="graphs">
+          <i class="fas fa-chart-line"></i>
+          <span>Graphs & Analytics</span>
+        </button>
       </div>
     </nav>
 
@@ -112,14 +126,72 @@
 
   <script src="app.js"></script>
   <script>
+    // Font Size Controls
+    class FontSizeController {
+      constructor() {
+        this.fontSize = parseFloat(localStorage.getItem('fontSize')) || 1;
+        this.minFontSize = 0.8;
+        this.maxFontSize = 1.4;
+        this.step = 0.1;
+        this.init();
+      }
+
+      init() {
+        this.applyFontSize();
+        this.bindEvents();
+      }
+
+      bindEvents() {
+        const decreaseBtn = document.getElementById('decreaseFontBtn');
+        const increaseBtn = document.getElementById('increaseFontBtn');
+
+        if (decreaseBtn) {
+          decreaseBtn.addEventListener('click', () => this.decreaseFontSize());
+        }
+        if (increaseBtn) {
+          increaseBtn.addEventListener('click', () => this.increaseFontSize());
+        }
+      }
+
+      increaseFontSize() {
+        if (this.fontSize < this.maxFontSize) {
+          this.fontSize = Math.min(this.fontSize + this.step, this.maxFontSize);
+          this.applyFontSize();
+          this.saveFontSize();
+        }
+      }
+
+      decreaseFontSize() {
+        if (this.fontSize > this.minFontSize) {
+          this.fontSize = Math.max(this.fontSize - this.step, this.minFontSize);
+          this.applyFontSize();
+          this.saveFontSize();
+        }
+      }
+
+      applyFontSize() {
+        document.documentElement.style.fontSize = `${this.fontSize * 16}px`;
+        document.body.style.fontSize = `${this.fontSize}rem`;
+      }
+
+      saveFontSize() {
+        localStorage.setItem('fontSize', this.fontSize.toString());
+      }
+    }
+
     // Update date and time
     function updateDateTime() {
       const now = new Date();
       document.getElementById('currentDate').textContent = now.toLocaleDateString();
       document.getElementById('currentTime').textContent = now.toLocaleTimeString();
     }
-    updateDateTime();
-    setInterval(updateDateTime, 1000);
+
+    // Initialize font size controller when DOM is loaded
+    document.addEventListener('DOMContentLoaded', function() {
+      new FontSizeController();
+      updateDateTime();
+      setInterval(updateDateTime, 1000);
+    });
   </script>
 </body>
 </html>
